@@ -1,0 +1,25 @@
+services:
+  league:
+    build: .
+    container_name: league
+    restart: unless-stopped
+
+    # API key 与 push token 从服务器上的 .env 读取，绝不打进镜像
+    env_file: .env
+
+    volumes:
+      # DDragon JSON + Lolalytics stats 缓存，重启/重建不重新下载
+      - league_cache:/app/cache
+
+    networks:
+      - caddy_default
+
+    # 不向宿主机暴露端口；Caddy 通过 Docker 内网 league:8765 反代
+
+volumes:
+  league_cache:
+    # Docker managed volume，数据存在宿主机 /var/lib/docker/volumes/
+
+networks:
+  caddy_default:
+    external: true   # 由 Caddy 的 compose 项目创建，这里只引用

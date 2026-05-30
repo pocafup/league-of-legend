@@ -1,0 +1,36 @@
+# 敏感 / 本地配置
+.env
+.env.*
+
+# Python 虚拟环境（镜像里会重建）
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 本地缓存（容器内用 volume，不打包进镜像）
+cache/
+
+# Agent 专用文件（server 镜像不需要）
+agent.py
+main.py
+capture/
+
+# 调试 / 测试数据
+fixtures/
+.playwright-mcp/
+
+# 版本控制
+.git/
+.gitignore
+
+# 编辑器 / IDE
+.vscode/
+*.swp
+*.swo
+
+# Docker 自身
+Dockerfile
+docker-compose.yml
+.dockerignore
