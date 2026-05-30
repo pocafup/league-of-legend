@@ -65,6 +65,41 @@ DDRAGON_CDN = f"https://ddragon.leagueoflegends.com/cdn/{dd._version}"
 # 最近一次 agent 推送的原始 session（内存存储）
 _current_session: Optional[dict] = None
 
+# ── 内置演示会话（荒漠屠夫上单 vs 诺手，排位赛）────────────────────────────────
+# 永久可用，不依赖磁盘文件，?demo=1 和 replay 文件缺失时均回退到此处。
+_DEMO_SESSION: dict = {
+    "actions": [[
+        {"actorCellId": 0, "championId": 58,  "completed": True, "isAllyAction": True,  "type": "pick"},
+        {"actorCellId": 1, "championId": 120, "completed": True, "isAllyAction": True,  "type": "pick"},
+        {"actorCellId": 2, "championId": 103, "completed": True, "isAllyAction": True,  "type": "pick"},
+        {"actorCellId": 3, "championId": 222, "completed": True, "isAllyAction": True,  "type": "pick"},
+        {"actorCellId": 4, "championId": 412, "completed": True, "isAllyAction": True,  "type": "pick"},
+        {"actorCellId": 5, "championId": 122, "completed": True, "isAllyAction": False, "type": "pick"},
+        {"actorCellId": 6, "championId": 64,  "completed": True, "isAllyAction": False, "type": "pick"},
+        {"actorCellId": 7, "championId": 238, "completed": True, "isAllyAction": False, "type": "pick"},
+        {"actorCellId": 8, "championId": 51,  "completed": True, "isAllyAction": False, "type": "pick"},
+        {"actorCellId": 9, "championId": 117, "completed": True, "isAllyAction": False, "type": "pick"},
+    ]],
+    "isCustomGame": False,
+    "localPlayerCellId": 0,
+    "queueId": 420,
+    "timer": {"phase": "FINALIZATION"},
+    "myTeam": [
+        {"cellId": 0, "championId": 58,  "assignedPosition": "top",     "gameName": "pocafup", "team": 1},
+        {"cellId": 1, "championId": 120, "assignedPosition": "jungle",  "gameName": "Ally1",   "team": 1},
+        {"cellId": 2, "championId": 103, "assignedPosition": "middle",  "gameName": "Ally2",   "team": 1},
+        {"cellId": 3, "championId": 222, "assignedPosition": "bottom",  "gameName": "Ally3",   "team": 1},
+        {"cellId": 4, "championId": 412, "assignedPosition": "utility", "gameName": "Ally4",   "team": 1},
+    ],
+    "theirTeam": [
+        {"cellId": 5, "championId": 122, "assignedPosition": "top",     "gameName": "Enemy1", "team": 2},
+        {"cellId": 6, "championId": 64,  "assignedPosition": "jungle",  "gameName": "Enemy2", "team": 2},
+        {"cellId": 7, "championId": 238, "assignedPosition": "middle",  "gameName": "Enemy3", "team": 2},
+        {"cellId": 8, "championId": 51,  "assignedPosition": "bottom",  "gameName": "Enemy4", "team": 2},
+        {"cellId": 9, "championId": 117, "assignedPosition": "utility", "gameName": "Enemy5", "team": 2},
+    ],
+}
+
 app = FastAPI(title="LOL 选人助手")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.mount("/web", StaticFiles(directory=str(WEB_DIR)), name="web")
@@ -145,29 +180,10 @@ def push_session(body: SessionPush, _: None = Depends(_check_push_token)):
     return {"ok": True}
 
 
-@app.get("/api/draft")
-def get_draft(
-    replay: Optional[str] = Query(None),
-    _: None = Depends(_check_page_token),
-):
-    """
-    返回当前阵容。
-    - ?replay=<path>: 从本地文件读（调试用）
-    - 否则返回 agent 最近推上来的会话；没有时返回等待状态
-    """
-    if replay:
-        try:
-            raw = json.loads(Path(replay).read_text(encoding="utf-8"))
-        except Exception as e:
-            return {"in_champ_select": False, "reason": f"replay 读取失败: {e}"}
-    else:
-        if _current_session is None:
-            return {"in_champ_select": False, "reason": "等待客户端连接…"}
-        raw = _current_session
-
+def _parse_raw(raw: dict) -> dict:
+    """公用：解析原始 LCU dict → 前端所需 JSON。"""
     ds = parse_lcu_session(raw, dd)
     enrich_session(ds)
-
     return {
         "in_champ_select": True,
         "queue_id":  ds.queue_id,
@@ -176,6 +192,36 @@ def get_draft(
         "enemy_team": [_member_dict(m) for m in ds.enemy_team],
         "version":   dd._version,
     }
+
+
+@app.get("/api/demo")
+def get_demo(_: None = Depends(_check_page_token)):
+    """返回内置演示会话（荒漠屠夫上单 vs 诺手）。永久可用，不依赖 agent 或磁盘文件。"""
+    return _parse_raw(_DEMO_SESSION)
+
+
+@app.get("/api/draft")
+def get_draft(
+    replay: Optional[str] = Query(None),
+    _: None = Depends(_check_page_token),
+):
+    """
+    返回当前阵容。
+    - ?replay=<path>: 从本地文件读；文件不存在时自动回退内置演示数据
+    - 否则返回 agent 最近推上来的会话；没有时返回等待状态
+    """
+    if replay:
+        try:
+            raw = json.loads(Path(replay).read_text(encoding="utf-8"))
+            return _parse_raw(raw)
+        except FileNotFoundError:
+            return _parse_raw(_DEMO_SESSION)   # 文件缺失→回退演示数据，不报错
+        except Exception as e:
+            return {"in_champ_select": False, "reason": f"replay 读取失败: {e}"}
+
+    if _current_session is None:
+        return {"in_champ_select": False, "reason": "等待客户端连接…"}
+    return _parse_raw(_current_session)
 
 
 # ── 内部辅助 ──────────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ const POS_CN = { top: '上单', jungle: '打野', middle: '中路', bottom: '下
 
 const app = {
     replayPath: new URLSearchParams(location.search).get('replay'),
+    demo: new URLSearchParams(location.search).get('demo') === '1',
     draft: null,
     selectedEnId: '',   // currently selected my champion
     selectedLane: '',
@@ -26,7 +27,8 @@ const app = {
         document.getElementById('refresh-btn').addEventListener('click', () => this.loadAdvice());
 
         await this.loadDraft();
-        if (!this.replayPath) {
+        // demo 模式静态数据，不轮询；replay 模式同理；live 模式才轮询
+        if (!this.replayPath && !this.demo) {
             this._pollTimer = setInterval(() => this.loadDraft(), 3000);
         }
     },
@@ -34,6 +36,11 @@ const app = {
     _apiUrl(path) {
         const u = new URL(path, location.origin);
         if (this._token) u.searchParams.set('token', this._token);
+        // demo 模式：/api/draft → /api/demo
+        if (this.demo && path === '/api/draft') {
+            return new URL('/api/demo', location.origin).toString() +
+                   (this._token ? `?token=${encodeURIComponent(this._token)}` : '');
+        }
         if (this.replayPath && path === '/api/draft') {
             u.searchParams.set('replay', this.replayPath);
         }
