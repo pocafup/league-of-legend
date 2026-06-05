@@ -75,6 +75,47 @@ class EnemyComp:
             if getattr(self, f) is None:
                 setattr(self, f, [])
 
+    @property
+    def phys_pct(self) -> float:
+        total = self.ad_count + self.ap_count
+        return self.ad_count / total if total > 0 else 0.5
+
+    @property
+    def magic_pct(self) -> float:
+        total = self.ad_count + self.ap_count
+        return self.ap_count / total if total > 0 else 0.5
+
+    def to_profile_dict(self) -> dict:
+        """转成 comp_build 和前端用的结构化字典。"""
+        phys = self.phys_pct
+        magic = self.magic_pct
+        if phys > magic + 0.15:
+            dmg_summary = f"偏物理（{phys:.0%}物理/{magic:.0%}法术）"
+        elif magic > phys + 0.15:
+            dmg_summary = f"偏法系（{magic:.0%}法术/{phys:.0%}物理）"
+        else:
+            dmg_summary = f"均衡（{phys:.0%}物理/{magic:.0%}法术）"
+        parts = [dmg_summary]
+        if self.hard_cc_count >= 2:
+            parts.append(f"{self.hard_cc_count}个硬控")
+        if self.tank_count >= 2:
+            parts.append(f"{self.tank_count}个坦克")
+        if self.healer_count >= 1:
+            parts.append(f"{self.healer_count}个高回复")
+        return {
+            "phys_pct":      round(phys, 3),
+            "magic_pct":     round(magic, 3),
+            "tank_count":    self.tank_count,
+            "hard_cc_count": self.hard_cc_count,
+            "healer_count":  self.healer_count,
+            "ad_names":      self.names_ad,
+            "ap_names":      self.names_ap,
+            "tank_names":    self.names_tank,
+            "cc_names":      self.names_cc,
+            "healer_names":  self.names_healer,
+            "summary":       "、".join(parts),
+        }
+
 
 def analyze_enemy_comp(enemy_team, dd: DDragonClient) -> EnemyComp:
     """

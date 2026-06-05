@@ -269,11 +269,28 @@ const app = {
         }
 
         // Build
+        const cb = data.comp_build;
         const b = data.build;
         const buildBody = document.getElementById('build-body');
-        if (!b) {
-            buildBody.innerHTML = '<div class="no-data">暂无出装数据</div>';
-        } else {
+
+        if (cb) {
+            const srcLabel = (cb.sources || []).slice(0, 2).join(' · ');
+            document.getElementById('build-source').textContent =
+                srcLabel + (cb.warnings && cb.warnings.length ? ' ⚠' : '');
+
+            let html = cb.comp_profile ? this._compProfileStrip(cb.comp_profile) : '';
+            if (cb.starter && cb.starter.length)
+                html += this._buildRow('起手', cb.starter, '→');
+            if (cb.boots && cb.boots.length)
+                html += this._buildRow('鞋子', cb.boots, '→');
+            if (cb.early_items && cb.early_items.length)
+                html += this._scoredItemsRow('对线', cb.early_items);
+            if (cb.late_items && cb.late_items.length)
+                html += this._scoredItemsRow('后期', cb.late_items);
+            if (cb.warnings && cb.warnings.length)
+                html += `<div class="build-warnings">${cb.warnings.map(w => `⚠ ${w}`).join('<br>')}</div>`;
+            buildBody.innerHTML = html;
+        } else if (b) {
             document.getElementById('build-source').textContent = b.source || '';
             const staleNote = b.stale ? `<div class="stale-warn" style="margin-bottom:8px">⚠ ${b.stale_reason || '数据可能过期'}</div>` : '';
             buildBody.innerHTML = staleNote + [
@@ -284,6 +301,8 @@ const app = {
             ].filter(r => r.items && r.items.length > 0)
              .map(r => this._buildRow(r.label, r.items, r.sep))
              .join('');
+        } else {
+            buildBody.innerHTML = '<div class="no-data">暂无出装数据</div>';
         }
 
         // Runes
@@ -305,6 +324,49 @@ const app = {
                 <span class="item-tooltip">${it.name}</span>
             </div>${i < items.length - 1 ? sepChar : ''}`
         ).join('');
+        return `<div class="build-row">
+            <span class="build-label">${label}</span>
+            <div class="item-list">${chips}</div>
+        </div>`;
+    },
+
+    _compProfileStrip(profile) {
+        const tags = [];
+        const phys = profile.phys_pct || 0;
+        const magic = profile.magic_pct || 0;
+
+        if (phys > magic + 0.15)
+            tags.push(`<span class="comp-tag phys">物理 ${Math.round(phys * 100)}%</span>`);
+        else if (magic > phys + 0.15)
+            tags.push(`<span class="comp-tag magic">法系 ${Math.round(magic * 100)}%</span>`);
+        else
+            tags.push(`<span class="comp-tag">均衡 物${Math.round(phys*100)}%/法${Math.round(magic*100)}%</span>`);
+
+        if (profile.hard_cc_count >= 2)
+            tags.push(`<span class="comp-tag cc">硬控 ×${profile.hard_cc_count}</span>`);
+        if (profile.tank_count >= 2)
+            tags.push(`<span class="comp-tag tank">坦克 ×${profile.tank_count}</span>`);
+        if (profile.healer_count >= 1)
+            tags.push(`<span class="comp-tag healer">回复 ×${profile.healer_count}</span>`);
+
+        return `<div class="comp-profile-strip">${tags.join('')}</div>`;
+    },
+
+    _scoredItemsRow(label, items) {
+        const sepChar = '<span class="item-sep">→</span>';
+        const chips = items.map((it, i) => {
+            const hasBonus = it.comp_bonus && it.comp_bonus > 0;
+            const reasonsHtml = (it.reasons || []).map(r =>
+                `<span class="reason-line">${r}</span>`
+            ).join('');
+            return `<div class="item-chip${hasBonus ? ' has-comp-bonus' : ''}">
+                <img class="item-img" src="${it.icon_url}" alt="${it.name}" onerror="this.style.visibility='hidden'">
+                <div class="item-reason-tooltip">
+                    <span class="reason-item-name">${it.name}</span>
+                    ${reasonsHtml}
+                </div>
+            </div>${i < items.length - 1 ? sepChar : ''}`;
+        }).join('');
         return `<div class="build-row">
             <span class="build-label">${label}</span>
             <div class="item-list">${chips}</div>

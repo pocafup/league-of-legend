@@ -275,7 +275,7 @@ def advise_build(req: AdviseReq, _: None = Depends(_check_page_token)):
     prov = _provider(req.tier)
     opp_en, opp_zh = _opponent(req)
 
-    build_d = runes_d = matchup_d = None
+    build_d = runes_d = matchup_d = comp_build_d = None
 
     try:
         b = prov.get_build(req.my_en_id, req.my_lane, opp_en)
@@ -321,14 +321,60 @@ def advise_build(req: AdviseReq, _: None = Depends(_check_page_token)):
     except Exception as e:
         print(f"  [server] get_matchup: {e}")
 
+    # ── 多对位阵容合成出装 ──────────────────────────────────────────────────
+    try:
+        from advisor.comp_build import build_comp_build
+        from advisor.comp_adjust import analyze_enemy_comp
+
+        enemy_members_for_comp = []
+        from advisor.session import TeamMember
+        for ref in req.enemy_team:
+            info = dd.get_by_en_id(ref.en_id) or dd.get_or_unknown(0)
+            enemy_members_for_comp.append(TeamMember(cell_id=-1, champ=info, position=ref.lane))
+
+        comp_obj = analyze_enemy_comp(enemy_members_for_comp, dd)
+        comp_profile = comp_obj.to_profile_dict()
+
+        cb = build_comp_build(
+            my_en_id     = req.my_en_id,
+            my_lane      = req.my_lane,
+            enemy_refs   = req.enemy_team,
+            provider     = prov,
+            comp_profile = comp_profile,
+            item_tags_fn = dd.item_tags,
+        )
+
+        def _scored_item_d(s) -> dict:
+            return {
+                **_item_d(s.item_id),
+                "score":      round(s.composite_score, 4),
+                "data_score": round(s.data_score, 4),
+                "comp_bonus": round(s.comp_bonus, 4),
+                "reasons":    s.reasons,
+            }
+
+        comp_build_d = {
+            "starter":      [_item_d(i) for i in cb.starter],
+            "boots":        [_item_d(i) for i in cb.boots],
+            "early_items":  [_scored_item_d(s) for s in cb.early_items],
+            "late_items":   [_scored_item_d(s) for s in cb.late_items],
+            "comp_profile": comp_profile,
+            "sources":      cb.sources,
+            "warnings":     cb.warnings,
+        }
+    except Exception as e:
+        import traceback
+        print(f"  [server] comp_build: {e}\n{traceback.format_exc()}")
+
     return {
         "opponent": {
             "en_id": opp_en, "zh_name": opp_zh,
             "avatar_url": _champ_icon(opp_en),
         } if opp_en else None,
-        "matchup": matchup_d,
-        "build":   build_d,
-        "runes":   runes_d,
+        "matchup":    matchup_d,
+        "build":      build_d,
+        "runes":      runes_d,
+        "comp_build": comp_build_d,
     }
 
 

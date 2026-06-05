@@ -136,6 +136,65 @@ def _first_item_id(data) -> Optional[int]:
     return None
 
 
+def _norm_pct(v) -> float:
+    """把 0-1 或 0-100 的百分比统一到 0-100 范围。"""
+    if not isinstance(v, (int, float)):
+        return 0.0
+    f = float(v)
+    return f * 100 if 0 < f <= 1.0 else f
+
+
+def _parse_item_tables(objs: list, build_obj: dict) -> dict:
+    """
+    提取每个装备槽的完整排名列表，用于多对位混合打分。
+    返回 {"item1": [{"id":..,"wr":..,"pick":..,"count":..}, ...], ...}
+    """
+    result: dict[str, list[dict]] = {}
+
+    for slot in ("item1", "item2", "item3", "item4", "item5", "boots"):
+        raw = _dd(build_obj.get(slot, []), objs)
+        entries: list[dict] = []
+        if isinstance(raw, list):
+            for row in raw:
+                if not isinstance(row, list) or len(row) < 4:
+                    continue
+                item_id, wr_v, pk_v, cnt_v = row[0], row[1], row[2], row[3]
+                if not isinstance(item_id, int) or item_id <= 0:
+                    continue
+                entries.append({
+                    "id":    item_id,
+                    "wr":    _norm_pct(wr_v),
+                    "pick":  _norm_pct(pk_v),
+                    "count": int(cnt_v) if isinstance(cnt_v, (int, float)) else 0,
+                })
+        result[slot] = entries
+
+    # 起手套装
+    startset = _dd(build_obj.get("startSet", []), objs)
+    start_entries: list[dict] = []
+    if isinstance(startset, list):
+        for row in startset:
+            if not isinstance(row, list) or not row:
+                continue
+            raw_str = row[0]
+            ids = [int(x) for x in str(raw_str).split("_") if isinstance(x, str) and x.isdigit()
+                   or isinstance(x, int) and x > 0]
+            if not ids:
+                continue
+            wr_v  = row[1] if len(row) > 1 else 0
+            pk_v  = row[2] if len(row) > 2 else 0
+            cnt_v = row[3] if len(row) > 3 else 0
+            start_entries.append({
+                "ids":   ids,
+                "wr":    _norm_pct(wr_v),
+                "pick":  _norm_pct(pk_v),
+                "count": int(cnt_v) if isinstance(cnt_v, (int, float)) else 0,
+            })
+    result["startSet"] = start_entries
+
+    return result
+
+
 def _parse_build(objs: list, build_obj: dict) -> dict:
     """从主 build 对象提取出装数据。"""
     # 起手套装
@@ -310,12 +369,14 @@ def _fetch_page(champ: str, role: str, tier: str, enemy: str = "") -> Optional[d
     wr = header.get("wr") if isinstance(header, dict) else None
     patch = header.get("patch", "") if isinstance(header, dict) else ""
 
-    build_data = _parse_build(objs, build_obj)
-    rune_data  = _parse_runes(objs, build_obj)
+    build_data  = _parse_build(objs, build_obj)
+    rune_data   = _parse_runes(objs, build_obj)
+    item_tables = _parse_item_tables(objs, build_obj)
 
     return {
         "build": build_data,
         "runes": rune_data,
+        "item_tables": item_tables,
         "n": n,
         "wr": wr,
         "patch": patch,
@@ -465,3 +526,36 @@ class LolalyticsProvider(StatsProvider):
 
     def get_primary_role(self, champ_en_id: str) -> Optional[str]:
         return None
+
+    def get_item_table(
+        self, champ_en_id: str, role: str, enemy_en_id: str, min_n: int = 200
+    ) -> Optional[dict]:
+        """
+        返回 my vs enemy 的完整装备排名表（item1-5 + boots + startSet）。
+        样本 < min_n 返回 None（不回退通用，保持混合数据纯净）。
+        已有缓存但缺少 item_tables 字段时自动重新抓取。
+        """
+        if not enemy_en_id:
+            return None
+        cp = _cache_path(champ_en_id, role, self.tier, enemy_en_id)
+        cached = _load_cache(cp)
+
+        # 旧缓存没有 item_tables 字段，需要重新抓取
+        if cached and "item_tables" not in cached:
+            cached = None
+
+        if cached is None:
+            data = _fetch_page(champ_en_id, role, self.tier, enemy_en_id)
+            if data:
+                _save_cache(cp, data)
+                cached = data
+
+        if cached is None:
+            return None
+
+        n = cached.get("n", 0)
+        if n < min_n:
+            print(f"  [Lolalytics] {champ_en_id} vs {enemy_en_id} 样本 {n} < {min_n}，跳过混合")
+            return None
+
+        return {**cached.get("item_tables", {}), "n": n, "patch": cached.get("patch", "")}

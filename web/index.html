@@ -353,6 +353,81 @@
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: #0a0e1a; }
   ::-webkit-scrollbar-thumb { background: #2a3a4a; border-radius: 3px; }
+
+  /* ── Comp profile strip ── */
+  .comp-profile-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #1a2535;
+  }
+  .comp-tag {
+    display: inline-flex;
+    align-items: center;
+    background: #101824;
+    border: 1px solid #2a3a4a;
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-size: 11px;
+    color: #7a8a9a;
+  }
+  .comp-tag.phys   { border-color: #5a3a1a; color: #c8803a; }
+  .comp-tag.magic  { border-color: #1a2a5a; color: #5a9fd4; }
+  .comp-tag.cc     { border-color: #5a4a1a; color: #c8a050; }
+  .comp-tag.tank   { border-color: #1a4a2a; color: #3aaf6a; }
+  .comp-tag.healer { border-color: #4a1a3a; color: #c06090; }
+
+  /* ── Scored item: green border when comp bonus applies ── */
+  .item-chip.has-comp-bonus .item-img { border-color: #3a6a3a; }
+
+  /* ── Multi-line reason tooltip ── */
+  .item-reason-tooltip {
+    position: absolute;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #070d1a;
+    border: 1px solid #3a5a7a;
+    color: #b0c0d0;
+    font-size: 11px;
+    padding: 7px 10px;
+    border-radius: 4px;
+    white-space: normal;
+    width: 240px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 100;
+    line-height: 1.5;
+    text-align: left;
+  }
+  .item-chip:hover .item-reason-tooltip { opacity: 1; }
+  .reason-item-name {
+    display: block;
+    color: #d0d8e8;
+    font-size: 12px;
+    font-weight: bold;
+    margin-bottom: 4px;
+    border-bottom: 1px solid #2a3a4a;
+    padding-bottom: 3px;
+  }
+  .reason-line {
+    display: block;
+    color: #7a8a9a;
+    font-size: 10px;
+    margin-top: 2px;
+    line-height: 1.4;
+  }
+
+  /* ── Build source warnings ── */
+  .build-warnings {
+    font-size: 11px;
+    color: #7a5a2a;
+    margin-top: 8px;
+    line-height: 1.6;
+  }
 </style>
 </head>
 <body>

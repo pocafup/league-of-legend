@@ -103,6 +103,7 @@ def run_matchup(
     # 4. 获取统计数据
     provider = LolalyticsProvider(tier=tier)
     build = runes = matchup = None
+    vs_build = vs_runes = None
     try:
         build   = provider.get_build(me.en_id, lane, vs.en_id)
     except Exception as e:
@@ -115,31 +116,47 @@ def run_matchup(
         matchup = provider.get_matchup(me.en_id, lane, vs.en_id)
     except Exception as e:
         print(f"  [matchup] get_matchup 失败: {e}")
+    try:
+        vs_build = provider.get_build(vs.en_id, lane, me.en_id)
+    except Exception as e:
+        print(f"  [matchup] vs get_build 失败: {e}")
+    try:
+        vs_runes = provider.get_runes(vs.en_id, lane, me.en_id)
+    except Exception as e:
+        print(f"  [matchup] vs get_runes 失败: {e}")
 
     # 5. 构建 Claude 描述字串
-    bp: list[str] = []
-    if build:
-        if build.starter:
-            bp.append("起手：" + " → ".join(dd.item_name(i) for i in build.starter))
-        if build.boots:
-            bp.append("鞋子：" + " → ".join(dd.item_name(i) for i in build.boots))
-        if build.core:
-            bp.append("核心：" + " → ".join(dd.item_name(i) for i in build.core))
-        sit = build.fourth + build.fifth + build.sixth
-        if sit:
-            bp.append("按需：" + " / ".join(dd.item_name(i) for i in sit))
-    build_desc = "出装：" + "；".join(bp) if bp else "出装：暂无数据"
+    def _build_desc(b, r) -> tuple[str, str]:
+        bp: list[str] = []
+        if b:
+            if b.starter:
+                bp.append("起手：" + " → ".join(dd.item_name(i) for i in b.starter))
+            if b.boots:
+                bp.append("鞋子：" + " → ".join(dd.item_name(i) for i in b.boots))
+            if b.core:
+                bp.append("核心：" + " → ".join(dd.item_name(i) for i in b.core))
+            sit = b.fourth + b.fifth + b.sixth
+            if sit:
+                bp.append("按需：" + " / ".join(dd.item_name(i) for i in sit))
+        bd = "出装：" + "；".join(bp) if bp else "出装：暂无数据"
 
-    runes_desc = "符文：暂无数据"
-    if runes:
-        pri = dd.rune_style_name(runes.primary_tree)
-        ks  = dd.rune_name(runes.keystone) if runes.keystone else "无"
-        pp  = " / ".join(dd.rune_name(i) for i in runes.primary_perks) if runes.primary_perks else "无"
-        sec = dd.rune_style_name(runes.secondary_tree)
-        sp  = " / ".join(dd.rune_name(i) for i in runes.secondary_perks) if runes.secondary_perks else "无"
-        runes_desc = f"符文：主系{pri}（{ks}），{pp}；副系{sec}，{sp}"
+        rd = "符文：暂无数据"
+        if r:
+            pri = dd.rune_style_name(r.primary_tree)
+            ks  = dd.rune_name(r.keystone) if r.keystone else "无"
+            pp  = " / ".join(dd.rune_name(i) for i in r.primary_perks) if r.primary_perks else "无"
+            sec = dd.rune_style_name(r.secondary_tree)
+            sp  = " / ".join(dd.rune_name(i) for i in r.secondary_perks) if r.secondary_perks else "无"
+            rd = f"符文：主系{pri}（{ks}），{pp}；副系{sec}，{sp}"
+        return bd, rd
+
+    build_desc, runes_desc = _build_desc(build, runes)
+    vs_build_desc, vs_runes_desc = _build_desc(vs_build, vs_runes)
 
     # 6. Claude tips
+    me_spells = dd.get_spell_names(me.en_id)
+    vs_spells = dd.get_spell_names(vs.en_id)
+
     from advisor.tips import generate_matchup_tips
     print("  [matchup] 调用 Claude 生成对线建议…")
     lane_tips, tips_error = generate_matchup_tips(
@@ -147,6 +164,8 @@ def run_matchup(
         lane_cn=lane_cn, vs_zh=vs.zh_name, vs_en=vs.en_id,
         build_desc=build_desc, runes_desc=runes_desc,
         matchup_wr=matchup.win_rate if matchup else None,
+        vs_build_desc=vs_build_desc, vs_runes_desc=vs_runes_desc,
+        me_spells=me_spells, vs_spells=vs_spells,
     )
 
     # 7. 渲染

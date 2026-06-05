@@ -84,6 +84,7 @@ class DDragonClient:
         self._by_id: dict[int, ChampionInfo] = {}
         # item
         self._item_names: dict[int, str] = {}
+        self._item_tags:  dict[int, tuple[str, ...]] = {}
         # runes
         self._perk_names:  dict[int, str] = {}   # perk id → 中文名
         self._style_names: dict[int, str] = {}   # perkStyle id → 中文名
@@ -194,7 +195,44 @@ class DDragonClient:
 
         return []
 
+    def get_spell_names(self, en_id: str) -> dict[str, str]:
+        """
+        返回英雄技能名称 {"passive": "...", "Q": "...", "W": "...", "E": "...", "R": "..."}。
+        数据来自 champion/{en_id}.json（按需下载并缓存）。找不到时返回空 dict。
+        """
+        cache_file = self._cache_dir / f"ddragon_spells_{en_id}_{self._version}_{self._lang}.json"
+        if cache_file.exists():
+            try:
+                return json.loads(cache_file.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
+        url = f"{DDRAGON_BASE}/cdn/{self._version}/data/{self._lang}/champion/{en_id}.json"
+        try:
+            with httpx.Client(timeout=10) as client:
+                resp = client.get(url)
+                resp.raise_for_status()
+                data = resp.json()["data"][en_id]
+        except Exception as e:
+            print(f"  [ddragon] 拉取 {en_id} 技能失败: {e}")
+            return {}
+
+        keys = ["Q", "W", "E", "R"]
+        result: dict[str, str] = {}
+        passive = data.get("passive", {})
+        if passive.get("name"):
+            result["被动"] = passive["name"]
+        for key, spell in zip(keys, data.get("spells", [])):
+            if spell.get("name"):
+                result[key] = spell["name"]
+
+        cache_file.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+        return result
+
     # item / rune 翻译（查不到时降级显示，不崩溃）
+
+    def item_tags(self, item_id: int) -> list[str]:
+        return list(self._item_tags.get(item_id, ()))
 
     def item_name(self, item_id: int) -> str:
         name = self._item_names.get(item_id)
@@ -261,7 +299,9 @@ class DDragonClient:
 
     def _build_item_maps(self, raw: dict) -> None:
         for id_str, entry in raw.get("data", {}).items():
-            self._item_names[int(id_str)] = entry["name"]
+            iid = int(id_str)
+            self._item_names[iid] = entry["name"]
+            self._item_tags[iid]  = tuple(entry.get("tags", []))
         print(f"[ddragon] 已建立 {len(self._item_names)} 个装备映射")
 
     def _build_rune_maps(self, raw) -> None:

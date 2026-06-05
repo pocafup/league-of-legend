@@ -1,0 +1,29 @@
+{
+  "_comment": "出装合成打分规则与权重，修改此文件无需改代码",
+  "position_weights": {
+    "lane":    0.35,
+    "jungle":  0.20,
+    "other":   0.15
+  },
+  "min_matchup_sample": 200,
+  "slots_early": ["item1", "item2"],
+  "slots_late":  ["item3", "item4", "item5"],
+  "comp_rules": {
+    "high_magic_threshold":    0.55,
+    "high_physical_threshold": 0.55,
+    "high_healer_threshold":   2,
+    "high_cc_threshold":       3,
+    "high_tank_threshold":     2,
+    "base_boost": 0.25,
+    "tag_boosts": {
+      "MagicResist":       {"condition": "high_magic",  "boost": 0.25},
+      "Armor":             {"condition": "high_phys",   "boost": 0.20},
+      "Tenacity":          {"condition": "high_cc",     "boost": 0.25},
+      "ArmorPenetration":  {"condition": "high_tank",   "boost": 0.25},
+      "MagicPenetration":  {"condition": "high_tank",   "boost": 0.15}
+    },
+    "gw_item_ids": [3033, 3123, 3165, 6933, 3036, 6609],
+    "gw_boost_condition": "high_healer",
+    "gw_boost": 0.30
+  }
+}

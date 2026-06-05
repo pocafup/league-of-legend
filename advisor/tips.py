@@ -10,7 +10,7 @@ import json
 import os
 from typing import Optional
 
-_MODEL = "claude-haiku-4-5-20251001"
+_MODEL = "claude-sonnet-4-6"
 _MAX_TOKENS = 1024
 
 # 如有失败返回的占位文本
@@ -46,6 +46,7 @@ def _build_prompt(
     comp_section = f"\n{comp_summary}" if comp_summary else ""
 
     return f"""你是英雄联盟教练助手。基于以下选人数据给出针对性建议。要求：简短具体（提到英雄名/技能/装备），不写泛泛套话，全程中文。
+重要限制：出装建议只能基于下方"出装与符文"提供的装备，不要推荐未出现的装备。
 
 ## 本局数据
 我的英雄：{my_champ_zh}（{my_champ_en}） / {my_position_cn}
@@ -73,7 +74,7 @@ def _build_prompt(
     "2-4条：我方开/接团方式、集火谁、躲对面哪个关键技能、站位与进场时机"
   ],
   "comp_adjust": [
-    "2-4条，针对敌方阵容的具体出装调整建议。格式：因为对面有XXX→考虑把YYY换成ZZZ / 在第N件加一件ZZZ。只在有实质调整时写，没有就给空数组"
+    "2-4条，针对敌方阵容的出装调整说明：解释各件装备的入选原因（数据/阵容），分数相近时给出裁决。只在有实质内容时写，没有就给空数组"
   ]
 }}"""
 
@@ -166,6 +167,10 @@ def generate_matchup_tips(
     build_desc: str = "",
     runes_desc: str = "",
     matchup_wr: Optional[float] = None,
+    vs_build_desc: str = "",
+    vs_runes_desc: str = "",
+    me_spells: dict[str, str] | None = None,
+    vs_spells: dict[str, str] | None = None,
 ) -> tuple[list[str], str]:
     """
     生成 3-6 条对线注意点（仅对线，不含团战/阵容部分）。
@@ -190,22 +195,43 @@ def generate_matchup_tips(
     )
 
     vs_label = f"{vs_zh}（{vs_en}）" if vs_en and vs_en != "Unknown" else vs_zh
+
+    def _spell_line(zh_name: str, spells: dict[str, str] | None) -> str:
+        if not spells:
+            return ""
+        parts = [f"{k}-{v}" for k, v in spells.items()]
+        return f"{zh_name}技能：{' / '.join(parts)}"
+
+    me_spell_line = _spell_line(me_zh, me_spells)
+    vs_spell_line = _spell_line(vs_zh, vs_spells)
+    spell_section = "\n".join(filter(None, [me_spell_line, vs_spell_line]))
+    if spell_section:
+        spell_section = f"\n技能名称（仅供核对，不要臆造技能效果）：\n{spell_section}\n"
+
+    vs_data_section = ""
+    if vs_build_desc or vs_runes_desc:
+        vs_data_section = f"""
+对手当前版本出装与符文（来自统计站，严格基于此推断对手打法，不要引用此处未提及的路线）：
+{vs_build_desc}
+{vs_runes_desc}"""
+
     prompt = f"""你是英雄联盟教练助手。基于以下对位数据给出针对性对线建议。
-要求：简短具体（提到技能名/装备名），不写泛泛套话，全程中文。
+要求：简短具体（可提技能名），不写泛泛套话，全程中文。
+重要限制：只根据下方提供的出装/符文/技能名数据推断策略。技能效果细节（伤害类型、数值、交互）不在提供范围内，如不确定请只提技能名，不要描述效果。
 
 ## 对位数据
 我的英雄：{me_zh}（{me_en}） / {lane_cn}
 对手：{vs_label}
 {wr_line}
-
-出装与符文（对位数据）：
+{spell_section}
+我方出装与符文（来自统计站）：
 {build_desc}
 {runes_desc}
-
+{vs_data_section}
 ## 输出要求
 严格只输出下面的 JSON，不要任何其他文字：
 {{"tips": [
-  "3-6条，针对此对位的具体对线思路：对手强势/弱势期、需注意的关键技能、换血时机、核心装备成型节点"
+  "3-6条，针对此对位的具体对线思路：对手强势/弱势期、关键技能时机、换血节奏、核心装备成型节点"
 ]}}"""
 
     try:
